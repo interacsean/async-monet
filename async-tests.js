@@ -1,12 +1,7 @@
 const {
   Either,
   Maybe,
-} = require('monet');
-require('./asyncize');
-// const {
-//   AsyncEither,
-//   AsyncEitherProto
-// } = require('./extends');
+} = require('./async-monet');
 
 const delay = (val, shouldRes = true) =>
   new Promise((res, rej) =>
@@ -43,6 +38,16 @@ const getMaybe = (v, r = true) =>
       console.log(a);
       return delay(getMaybe(a + 1, false))
     })
-    .toEither('bad');
+    .toEither('bad')
+    .cata(
+      l => {
+        console.log(l);
+        return l+l;
+      },
+      r => {
+        console.log(r);
+        return r+r;
+      }
+    );
   console.log('result: ', e);
 })();
