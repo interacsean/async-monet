@@ -1,0 +1,25 @@
+{
+  "name": "async-monet",
+  "version": "0.1.0",
+  "description": "Wrapping for ES6 promises to be compatible with monet library's monadic functions",
+  "main": "async-monet.js",
+  "dependencies": {
+    "monet": "^0.8.10"
+  },
+  "devDependencies": {
+    "jasmine": "^3.1.0"
+  },
+  "scripts": {
+    "test": "jasmine"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interacsean/async-monet.git"
+  },
+  "author": "Sean Hasselback",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/interacsean/async-monet/issues"
+  },
+  "homepage": "https://github.com/interacsean/async-monet#readme"
+}
