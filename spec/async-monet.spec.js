@@ -7,7 +7,7 @@ const delay = (val, shouldRes = true) => new Promise((res, rej) =>
   setTimeout(() => shouldRes ? res(val) : rej(val), 500));
 
 describe('Standard Either', () => {
-  it('Can still map synchronously (as per original monet)', async (done) => {
+  it('Can still map synchronously (as per original monet)', () => {
     const either = Either.Right('value');
     
     const result = either
@@ -16,8 +16,6 @@ describe('Standard Either', () => {
   
     expect(result.isRight()).toBe(true);
     expect(result.right()).toEqual('value mapped twice');
-    
-    done();
   });
 
   it('Can still flatMap syncronously', () => {
@@ -61,11 +59,11 @@ describe('Async Either', () => {
   it('Can flatMap asynchronously', async (done) => {
     const either = Either.Right('value');
 
-    const result = await either
+    const result = either
       .flatMap((val) => delay(Either.Right(`${val} flatMapped`)))
       .flatMap(val => `${val} twice`);
 
-    expect(result).toEqual('value flatMapped twice');
+    expect(await result).toEqual('value flatMapped twice');
 
     done();
   });

@@ -39,10 +39,31 @@ const mFuncs = [
   'isRight',
 ];
 
+const MProm = function(promFn) {
+  var prom = new Promise(promFn);
+  this.then = (f) => prom.then(f);
+  this.catch = (f) => prom.catch(f);
+  mFuncs.forEach(mFunc => {
+    this[mFunc] = function(...args) {
+      return this.then((resVal) => resVal.__proto__[mFunc].apply(resVal, args));  
+    };
+  });
+}
+// MProm.prototype = Promise.prototype;
+
 mFuncs.forEach(mFunc => {
-  Promise.prototype[mFunc] = function(f) {
-    return this.then((resVal) => resVal.__proto__[mFunc].call(resVal, f));  
-  };
+  var oldFunc = monet.Either.fn[mFunc];
+  monet.Either.fn[mFunc] = function(...args) {
+    const r = oldFunc.apply(this, args);
+    if (r.then && typeof r.then === 'function') {
+      const mprom = new MProm((resolve, reject) => {
+        r.then(resolve).catch(reject);
+      });
+      return mprom;
+    }
+    return r;
+  }
 })
+// console.log(MProm, MProm.prototype);
 
 module.exports = monet;
