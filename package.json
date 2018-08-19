@@ -1,7 +1,7 @@
 {
   "name": "async-monet",
-  "version": "0.1.0",
-  "description": "Wrapping for ES6 promises to be compatible with monet library's monadic functions",
+  "version": "0.2.0",
+  "description": "Wrapping for ES6 promises to be compatible with monet library's monadic functions; plus extension functors",
   "main": "async-monet.js",
   "dependencies": {
     "monet": "^0.8.10"

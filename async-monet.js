@@ -1,30 +1,47 @@
 const monet = require('monet');
 
-// Create leftBind / leftFlatMap
-monet.Either.fn.leftBind = function(fn) {
-  return this.isLeft() ? fn(this.value) : this;
-}
-monet.Either.fn.leftFlatMap = monet.Either.fn.leftBind;
+function extendMonet() {
+  // leftBind/leftFlatMap, which flatMaps in left/none conditions
+  monet.Either.fn.leftBind = function leftBind(fn) {
+    return this.isLeft() ? fn(this.value) : this;
+  };
+  monet.Either.fn.leftFlatMap = monet.Either.fn.leftBind;
 
-// map which awaits thenable value
-monet.Either.fn.awaitMap = function (fn) {
-  if (this.isRightValue) {
-    const result = fn(this.value);
-    if (typeof result.then === 'function') {
-      return new Promise((res, rej) => {
-        result
-          .then(resVal => res(monet.Either.Right(resVal)))
-          .catch(rejVal => rej(monet.Either.Right(rejVal)))
-      })
+  // tap, which takes a right value but returns original unmodified value
+  monet.Either.fn.tap = function tap(fn) {
+    return this.map((original) => {
+      fn(original);
+      return original;
+    });
+  };
+  monet.Maybe.fn.tap = monet.Either.fn.tap;
+  
+  // // flipMap, which maps but converts Left to Right, None to Some, and vica versa.
+  // monet.Either.fn.flipMap = function flipMap() {
+  //   return this.
+  // }
+
+  // map, which awaits thenable value
+  monet.Either.fn.awaitMap = function (fn) {
+    if (this.isRightValue) {
+      const result = fn(this.value);
+      if (typeof result.then === 'function') {
+        return new Promise((res, rej) => {
+          result
+            .then(resVal => res(monet.Either.Right(resVal)))
+            .catch(rejVal => rej(monet.Either.Right(rejVal)))
+        })
+      }
+      return monet.Either.Right(result);
     }
-    return monet.Either.Right(result);
-  }
-  return this;
+    return this;
+  }  
 }
 
-const mFuncs = [
+const monadicFns = [
   'map',
   'leftBind',
+  'leftMap',
   'leftFlatMap',
   'awaitMap',
   'flatMap',
@@ -33,37 +50,44 @@ const mFuncs = [
   'toMaybe',
   'cata',
   'bimap',
-  'left',
-  'right',
-  'isLeft',
-  'isRight',
+  'tap',
 ];
 
-const MProm = function(promFn) {
-  var prom = new Promise(promFn);
-  this.then = (f) => prom.then(f);
-  this.catch = (f) => prom.catch(f);
-  mFuncs.forEach(mFunc => {
-    this[mFunc] = function(...args) {
-      return this.then((resVal) => resVal.__proto__[mFunc].apply(resVal, args));  
-    };
+const monetMonads = [
+  'Maybe',
+  'Either',
+];
+
+function monadifyPromises() {
+  function MonadicPromise(prom) {
+    this.prom = prom;
+    this.then = prom.then.bind(this.prom);
+    this.catch = prom.catch.bind(this.prom);
+  }
+  monadicFns.forEach(monadicFn => {
+    MonadicPromise.prototype[monadicFn] =
+      function anonFunctor(...args) {
+        return new MonadicPromise(this.prom.then((resVal) =>
+          resVal[monadicFn].call(resVal, ...args)));
+      };
+  });
+
+  monetMonads.forEach(monad => {
+    monadicFns.forEach(monadicFn => {
+      if (monet[monad].fn[monadicFn] !== undefined) {
+        const oldFunc = monet[monad].fn[monadicFn];
+        monet[monad].fn[monadicFn] = function anonFunctor(...args) {
+          const result = oldFunc.call(this, ...args);
+          return (result || {}).then && typeof result.then === 'function'
+            ? new MonadicPromise(result)
+            : result;
+        };
+      }
+    });
   });
 }
-// MProm.prototype = Promise.prototype;
 
-mFuncs.forEach(mFunc => {
-  var oldFunc = monet.Either.fn[mFunc];
-  monet.Either.fn[mFunc] = function(...args) {
-    const r = oldFunc.apply(this, args);
-    if (r.then && typeof r.then === 'function') {
-      const mprom = new MProm((resolve, reject) => {
-        r.then(resolve).catch(reject);
-      });
-      return mprom;
-    }
-    return r;
-  }
-})
-// console.log(MProm, MProm.prototype);
-
-module.exports = monet;
+module.exports = {
+  monadifyPromises,
+  extendMonet,
+};
