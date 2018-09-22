@@ -1,6 +1,6 @@
 const monet = require('monet');
 
-function extendMonet() {
+monet.extendMonet = function extendMonet() {
   // leftBind/leftFlatMap, which flatMaps in left/none conditions
   monet.Either.fn.leftBind = function leftBind(fn) {
     return this.isLeft() ? fn(this.value) : this;
@@ -16,10 +16,18 @@ function extendMonet() {
   };
   monet.Maybe.fn.tap = monet.Either.fn.tap;
   
+  // fromPromise, errors (catch) go to None
+  monet.Maybe.fn.fromPromise = function fromPromise(prom) {
+    return Promise.then(monet.Maybe.of).catch(monet.Maybe.None);
+  };
+
   // // flipMap, which maps but converts Left to Right, None to Some, and vica versa.
-  // monet.Either.fn.flipMap = function flipMap() {
-  //   return this.
-  // }
+  monet.Maybe.fn.flip = function flip(someValue) {
+    return this.cata(() => monet.Some(someValue), monet.None);
+  }
+  monet.Either.fn.flip = function flip() {
+    return this.cata(monet.Right, monet.Left);
+  }
 
   // map, which awaits thenable value
   monet.Either.fn.awaitMap = function (fn) {
@@ -36,6 +44,11 @@ function extendMonet() {
     }
     return this;
   }  
+
+  // fromPromise, errors (catch) go to Left
+  monet.Either.fn.fromPromise = function fromPromise(prom) {
+    return Promise.then(monet.Either.Right).catch(monet.Either.Left);
+  };
 }
 
 const monadicFns = [
@@ -51,6 +64,7 @@ const monadicFns = [
   'cata',
   'bimap',
   'tap',
+  'fromPromise',
 ];
 
 const monetMonads = [
@@ -58,12 +72,13 @@ const monetMonads = [
   'Either',
 ];
 
-function monadifyPromises() {
+monet.returnMonadicPromises = function returnMonadicPromises() {
   function MonadicPromise(prom) {
     this.prom = prom;
     this.then = prom.then.bind(this.prom);
     this.catch = prom.catch.bind(this.prom);
   }
+  
   monadicFns.forEach(monadicFn => {
     MonadicPromise.prototype[monadicFn] =
       function anonFunctor(...args) {
@@ -87,7 +102,4 @@ function monadifyPromises() {
   });
 }
 
-module.exports = {
-  monadifyPromises,
-  extendMonet,
-};
+module.exports = monet;
