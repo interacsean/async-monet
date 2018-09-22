@@ -1,279 +1,178 @@
-const {
-  monadifyPromises,
-  extendMonet,
-} = require('../async-monet');
-const {
-  Either,
-  Maybe,
-} = require('monet');
+/*
+[_] Update functions to create a PEither / PMaybe on monet instead of mutating
+[_] Update type to add new interface for PEither / PMaybe
+*/
 
-extendMonet();
-monadifyPromises();
+const monet = require('monet');
 
-const delay = (val, shouldRes = true) => new Promise((res, rej) =>
-  setTimeout(() => shouldRes ? res(val) : rej(val), 500));
+const monadFns = [
+  'map',
+  'awaitMap',
+  'flatMap',
+  'bind',
+  'tap',
+  'fromPromise',
+];
+
+// const monetMonads = [
+//   'Maybe',
+//   'Either',
+// ];
+
+const monetMonads = {
+  Maybe: [
+    ...monadFns,
+    'toEither',
+  ],
+  Either: [
+    ...monadFns,
+    'leftBind',
+    'leftMap',
+    'leftFlatMap',
+    'toMaybe',
+    'bimap',
+  ]
+}
+
+function MonadicPromise(prom) {
+  this.prom = prom;
+  this.then = prom.then.bind(this.prom);
+  this.catch = prom.catch.bind(this.prom);
+  this.promise = () => this.prom;
+}
+
+function PEither(prom) {
+  MonadicPromise.call(this, prom);
+}
+PEither.prototype = Object.create(MonadicPromise.prototype);
+PEither.prototype.constructor = PEither;
 
 
-describe('Async Monads', () => {
-  describe('Standard Either', () => {
-    it(
-      'Can still map synchronously (as per original monet)',
-      () => {
-        const either = Either.Right('value');
+function PMaybe(prom) {}
+PMaybe.prototype.constructor = MonadicPromise;
 
-        const result = either
-          .map((val) => `${val} mapped`)
-          .map((val) => `${val} twice`);
+monet.extendMonet = function extendMonet() {
+  const useMonadicPromises = true;
 
-        expect(result.isRight()).toBe(true);
-        expect(result.right()).toEqual('value mapped twice');
-      },
-    );
-  });
+  // leftBind/leftFlatMap, which flatMaps in left/none conditions
+  monet.Either.fn.leftBind = function leftBind(fn) {
+    return this.isLeft() ? fn(this.value) : this;
+  };
+  monet.Either.fn.leftFlatMap = monet.Either.fn.leftBind;
 
-  describe('Either left bind', () => {
-    it('binds on lefts', () => {
-      const either = Either.Left('value');
+  // tap, which takes a right value but returns original unmodified value
+  monet.Either.fn.tap = function tap(fn) {
+    return this.map((original) => {
+      fn(original);
+      return original;
+    });
+  };
+  monet.Maybe.fn.tap = monet.Either.fn.tap;
+  
+  // fromPromise, errors (catch) go to None
+  monet.Maybe.fn.fromPromise = function fromPromise(prom) {
+    return Promise.then(monet.Maybe.of).catch(monet.Maybe.None);
+  };
 
-      const result = either
-        .leftBind((val) => Either.Left(`${val} leftBound`))
-        .leftFlatMap((val) => `${val} twice`);
+  // // flipMap, which maps but converts Left to Right, None to Some, and vica versa.
+  monet.Maybe.fn.flip = function flip(someValue) {
+    return this.cata(() => monet.Some(someValue), monet.None);
+  }
+  monet.Either.fn.flip = function flip() {
+    return this.cata(monet.Right, monet.Left);
+  }
 
-      expect(result).toEqual('value leftBound twice');
+  // map, which awaits thenable value
+  monet.Either.fn.awaitMap = function (fn) {
+    if (this.isRightValue) {
+      const result = fn(this.value);
+      if (typeof result.then === 'function') {
+        return new Promise((res, rej) => {
+          result
+            .then(monet.Either.Right(resVal))
+            .catch(monet.Either.Right(rejVal))
+        });
+      }
+      return monet.Either.Right(result);
+    }
+    return this;
+  }  
+
+  // fromPromise, errors (catch) go to Left
+  monet.Either.fn.fromPromise = function fromPromise(prom) {
+    return Promise.then(monet.Either.Right).catch(monet.Either.Left);
+  };
+  monet.Maybe.fn.fromPromise = function fromPromise(prom) {
+    return Promise.then(monet.Maybe.Some).catch(monet.Maybe.None);
+  };
+
+  if (useMonadicPromises) {
+
+    // PEither = {};
+    // PEither = Object.assign({}, monet.Either);
+    // Object.keys(monet.Either).forEach(constructorFn => {
+    //   PEither[constructorFn] = PEither[constructorFn].bind(PEither);
+    // });
+    // PEither.prototype = monet.Either; // Object.assign({}, monet.Either.prototype);
+    PEither.Right = PEither.of = function (val) {
+      console.log('creating new peither');
+      console.log(PEither.fn.init === monet.Either.fn.init);
+      return new PEither.fn.init(val, true);
+    };
+    PEither.Left = function (val) {
+      return new PEither.fn.init(val, false);
+    };
+    PEither.fn = PEither.prototype;
+    Object.keys(monet.Either.prototype).forEach(protFn => {
+      PEither.prototype[protFn] = monet.Either.prototype[protFn];//.bind(PEither.fn);
+      // eval("PEither.prototype[protFn] = "+monet.Either.prototype[protFn].toString());
+    });
+    PEither.fn.init = function (val, isRightValue) {
+      this.isRightValue = isRightValue
+      this.value = val
+    },
+    PEither.fn.init.prototype = PEither.fn;
+    // console.log(PEither.prototype);
+    
+    monet.PMaybe = {};
+    monet.PMaybe.prototype = monet.Maybe;
+    monet.PMaybe.fn = monet.PMaybe.prototype;
+    
+    const PMonads = {
+      Either: PEither,
+      Maybe: PMaybe,
+    }
+
+    /**
+     * 
+     */
+
+    Object.keys(monetMonads).forEach(monad => {
+      monetMonads[monad].forEach(monadicFn => {
+        // PMonads[monad].prototype[monadicFn] =
+        //   function anonFunctor(...args) {
+        //     return !this.prom ? this[monadicFn].call(this, ...args) : new PMonads[monad](this.prom.then((resVal) =>
+        //       resVal[monadicFn].call(resVal, ...args)));
+        //   };
+
+        if (monet['P'+monad].fn[monadicFn] !== undefined) {
+          const oldFunc = monet['P'+monad].fn[monadicFn];
+          monet['P'+monad].fn[monadicFn] = function anonFunctor(...args) {
+            const result = oldFunc.call(this, ...args);
+            return (result || {}).then && typeof result.then === 'function'
+              ?  new PMonads[monad](result)
+              : result;
+          };
+        }
+      });
     });
 
-    it('does not bind on rights', () => {
-      const either = Either.Left('value');
+    // console.log(PEither.fn.map === monet.Either.fn.map);
+    // console.log('broo');
+    // console.log(Object.keys(PEither));
+  }
+}
 
-      const result = either
-        .leftBind((val) => Either.Right(`${val} leftBound once`))
-        .leftFlatMap((val) => `${val} not twice`);
+monet.PEither = PEither;
 
-      expect(result.isRight()).toBe(true);
-      expect(result.right()).toEqual('value leftBound once');
-    });
-  });
-
-  describe('Standard Maybe', () => {
-    it(
-      'Can still map synchronously (as per original monet)',
-      () => {
-        const maybe = Maybe.Some('value');
-
-        const result = maybe
-          .map((val) => `${val} mapped`)
-          .map((val) => `${val} twice`);
-
-        expect(result.isSome()).toBe(true);
-        expect(result.some()).toEqual('value mapped twice');
-      },
-    );
-
-    it('Can still flatMap synchronously', () => {
-      const maybe = Maybe.Some('value');
-
-      const result = maybe
-        .flatMap((val) => Maybe.Some(`${val} flatMapped`))
-        .flatMap((val) => `${val} twice`);
-
-      expect(result).toEqual('value flatMapped twice');
-    });
-  });
-
-  describe('Tap', () => {
-    it('does not affect flow on Eithers', () => {
-      const either = Either.Right('value');
-
-      let tappedVal = '';
-      const result = either
-        .map((val) => `${val} mapped`)
-        .tap((val) => {
-          tappedVal = val;
-          return val;
-        })
-        .map((val) => `${val} twice`);
-
-      expect(result.isRight()).toBe(true);
-      expect(result.right()).toEqual('value mapped twice');
-      expect(tappedVal).toEqual('value mapped');
-    });
-  });
-});
-
-
-
-
-describe('utils/monads/monadPromises', () => {
-  describe('Standard Either', () => {
-    it('Can still map synchronously (as per original monet)', () => {
-      const either = Either.Right('value');
-
-      const result = either
-        .map((val) => `${val} mapped`)
-        .map((val) => `${val} twice`);
-
-      expect(result.isRight()).toBe(true);
-      expect(result.right()).toEqual('value mapped twice');
-    });
-
-    it('Can still flatMap synchronously', () => {
-      const either = Either.Right('value');
-
-      const result = either
-        .flatMap((val) => Either.Right(`${val} flatMapped`))
-        .flatMap((val) => `${val} twice`);
-
-      expect(result).toEqual('value flatMapped twice');
-    });
-  });
-
-  describe('Async Either usage', () => {
-    it('Can flatMap asynchronously', async (done) => {
-      const either = Either.Right('value');
-
-      const result = await either
-        .flatMap((val) => delay(Either.Right(`${val} flatMapped`)))
-        .flatMap((val) => `${val} twice`);
-
-      expect(result).toEqual('value flatMapped twice');
-
-      done();
-    });
-
-    it('Can finish with asynchronous flatMap', async (done) => {
-      const either = Either.Right('value');
-
-      const result = await either
-        .flatMap((val) => delay(Either.Right(`${val} flatMapped`)))
-        .flatMap((val) => delay(`${val} twice`));
-
-      expect(result).toEqual('value flatMapped twice');
-
-      done();
-    });
-
-    it('flatMap bypasses left', async (done) => {
-      const either = Either.Right('value');
-
-      const result = await either
-        .flatMap((val) => delay(Either.Left(`${val} flatMapped once`)))
-        .flatMap((val) => `${val} not twice`);
-
-      expect(result.isLeft()).toBe(true);
-      expect(result.left()).toEqual('value flatMapped once');
-
-      done();
-    });
-  });
-
-  describe('Standard Maybe', () => {
-    it('Can still map synchronously (as per original monet)', () => {
-      const maybe = Maybe.Some('value');
-
-      const result = maybe
-        .map((val) => `${val} mapped`)
-        .map((val) => `${val} twice`);
-
-      expect(result.isSome()).toBe(true);
-      expect(result.some()).toEqual('value mapped twice');
-    });
-
-    it('Can still flatMap synchronously', () => {
-      const maybe = Maybe.Some('value');
-
-      const result = maybe
-        .flatMap((val) => Maybe.Some(`${val} flatMapped`))
-        .flatMap((val) => `${val} twice`);
-
-      expect(result).toEqual('value flatMapped twice');
-    });
-  });
-
-  describe('Async Maybe', () => {
-    it('Can flatMap asynchronously', async (done) => {
-      const maybe = Maybe.Some('value');
-
-      const result = await maybe
-        .flatMap((val) => delay(Maybe.Some(`${val} flatMapped`)))
-        .flatMap((val) => `${val} twice`);
-
-      expect(result).toEqual('value flatMapped twice');
-
-      done();
-    });
-
-    it('flatMap bypasses none', async (done) => {
-      const maybe = Maybe.Some('value');
-
-      const result = await maybe
-        .flatMap((val) => delay(Maybe.None(`${val} flatMapped once`)))
-        .flatMap((val) => `${val} not twice`);
-
-      expect(result.isNone()).toBe(true);
-
-      done();
-    });
-  });
-
-  describe('Async Cata', () => {
-    it('Can cata asynchronously on right', async (done) => {
-      const either = Either.Right('value');
-
-      const result = await either
-        .flatMap((val) => delay(Either.Right(`${val} mapped`)))
-        .tap((val) => {
-          const val2 = `${val} tapped`;
-          return val2;
-        })
-        .cata(
-          (err) => `${err} shouldn't get hit`,
-          (val) => delay(Either.Right(`${val} & cata-ed`)),
-        )
-        .map((val) => `${val} mapped`);
-
-      expect(result.right()).toEqual('value mapped & cata-ed mapped');
-
-      done();
-    });
-
-    it('Can cata asynchronously on left', async (done) => {
-      const either = Either.Right('value');
-
-      const result = await either
-        .flatMap((val) => delay(Either.Left(`${val} mapped`)))
-        .cata(
-          (errVal) => delay(Either.Left(`${errVal} & cata-ed`)),
-          (val) => `${val} shouldn't get hit`,
-        )
-        .map((val) => `${val} shouldn't get hit`);
-
-      expect(result.left()).toEqual('value mapped & cata-ed');
-
-      done();
-    });
-  });
-
-  it('Can chain every function', async (done) => {
-    const either = Either.Right('value');
-
-    const result = await either
-      .map((val) => `${val} mapped`)
-      .flatMap((val) => delay(Either.Right(`${val} asyncFlatMapped`)))
-      .flatMap((val) => Either.Right(`${val} flatMapped`))
-      .map((val) => `${val} mapped`)
-      .flatMap((val) => delay(Either.Left(`${val} asyncFlatMappedLeft`)))
-      .map(() => 'not called')
-      .leftMap((val) => `${val} leftMapped`)
-      .leftBind((val) => Either.Left(`${val} leftBound`))
-      .leftBind((val) => delay(Either.Right(`${val} leftBound`)))
-      .map((val) => `${val} mapped`)
-      .cata(
-        (val) => `${val} shouldn't get hit`,
-        (errVal) => delay(Either.Right(`${errVal} cata-ed`)),
-      );
-
-    expect(result.right()).toEqual('value mapped asyncFlatMapped flatMapped mapped asyncFlatMappedLeft leftMapped leftBound leftBound mapped cata-ed');
-
-    done();
-  });
-});
+module.exports = monet;
