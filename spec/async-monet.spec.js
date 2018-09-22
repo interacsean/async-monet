@@ -8,7 +8,6 @@ const {
 } = require('monet');
 
 extendMonet();
-monadifyPromises();
 
 const delay = (val, shouldRes = true) => new Promise((res, rej) =>
   setTimeout(() => shouldRes ? res(val) : rej(val), 500));

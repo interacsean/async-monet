@@ -38,13 +38,13 @@ function PEither(prom) {
 PEither.prototype = Object.create(MonadicPromise.prototype);
 PEither.prototype.constructor = PEither;
 
+function PMaybe(prom) {
+  MonadicPromise.call(this, prom);
+}
+PMaybe.prototype = Object.create(MonadicPromise.prototype);
+PMaybe.prototype.constructor = PMaybe;
 
-function PMaybe(prom) {}
-PMaybe.prototype.constructor = MonadicPromise;
-
-monet.extendMonet = function extendMonet(useMonadicPromises) {
-  const useMonadicPromises;
-
+monet.extendMonet = function extendMonet(useMonadicPromises = false) {
   // leftBind/leftFlatMap, which flatMaps in left/none conditions
   monet.Either.fn.leftBind = function leftBind(fn) {
     return this.isLeft() ? fn(this.value) : this;
@@ -93,19 +93,6 @@ monet.extendMonet = function extendMonet(useMonadicPromises) {
   };
 
   if (useMonadicPromises) {
-
-    // PEither = {};
-    // PEither = Object.assign({}, monet.Either);
-    // Object.keys(monet.Either).forEach(constructorFn => {
-    //   PEither[constructorFn] = PEither[constructorFn].bind(PEither);
-    // });
-    // PEither.prototype = monet.Either; // Object.assign({}, monet.Either.prototype);
-    PEither.Right = PEither.of = function (val) {
-      return new PEither.fn.init(val, true);
-    };
-    PEither.Left = function (val) {
-      return new PEither.fn.init(val, false);
-    };
     PEither.fn = PEither.prototype;
     Object.keys(monet.Either.prototype).forEach(protFn => {
       PEither.prototype[protFn] = monet.Either.prototype[protFn];//.bind(PEither.fn);
@@ -116,8 +103,15 @@ monet.extendMonet = function extendMonet(useMonadicPromises) {
       this.value = val
     },
     PEither.fn.init.prototype = PEither.fn;
-    // console.log(PEither.prototype);
     
+    PEither.Right = PEither.of = function (val) {
+      return new PEither.fn.init(val, true);
+    };
+    PEither.Left = function (val) {
+      return new PEither.fn.init(val, false);
+    };
+    
+    // todo
     monet.PMaybe = {};
     monet.PMaybe.prototype = monet.Maybe;
     monet.PMaybe.fn = monet.PMaybe.prototype;
@@ -126,10 +120,6 @@ monet.extendMonet = function extendMonet(useMonadicPromises) {
       Either: PEither,
       Maybe: PMaybe,
     }
-
-    /**
-     * 
-     */
 
     Object.keys(monetMonads).forEach(monad => {
       monetMonads[monad].forEach(monadicFn => {
@@ -158,5 +148,5 @@ monet.extendMonet = function extendMonet(useMonadicPromises) {
 }
 
 monet.PEither = PEither;
-
+monet.PMaybe = PMaybe;
 module.exports = monet;
