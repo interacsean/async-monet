@@ -1,7 +1,7 @@
 const {
   monadifyPromises,
   extendMonet,
-} = require('../async-monet');
+} = require('../');
 const {
   Either,
   Maybe,

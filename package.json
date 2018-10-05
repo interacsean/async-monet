@@ -2,7 +2,8 @@
   "name": "async-monet",
   "version": "0.2.0",
   "description": "Wrapping for ES6 promises to be compatible with monet library's monadic functions; plus extension functors",
-  "main": "async-monet.js",
+  "main": "index.js",
+  "types": "index.d.ts",
   "dependencies": {
     "monet": "^0.8.10"
   },
