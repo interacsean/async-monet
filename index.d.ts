@@ -5,7 +5,7 @@ interface Functor<T> {
 
 /* Typeclass for binding, the core monadic transformation */
 interface Bind<T> {
-  bind<V>(fn: (val: T) => Bind<V>): Bind<V> | Promise<Bind<V>>;
+  bind<V>(fn: (val: T) => Bind<V>): Bind<V>;
   chain<V>(fn: (val: T) => Bind<V>): Bind<V> | Promise<Bind<V>>;    // alias of bind
   flatMap<V>(fn: (val: T) => Bind<V>): Bind<V> | Promise<Bind<V>>;  // alias of bind
   join<V>(): Bind<V>;  // works only if T = Bind<V>
@@ -28,16 +28,15 @@ interface IMonadicPromise<T> {
 
 interface IMonad<T> extends Functor<T>, Bind<T>, Applicative<T> {
   /* These all are defined in Functor, Bind and Applicative: */
-  bind<V>(fn: (val: T) => IMonad<V>): IMonad<V> | Promise<IMonad<V>>;
-  flatMap<V>(fn: (val: T) => IMonad<V>): IMonad<V> | Promise<IMonad<V>>;
-  chain<V>(fn: (val: T) => IMonad<V>): IMonad<V> | Promise<IMonad<V>>;
-  map<V>(fn: (val: T) => V): IMonad<V> | Promise<IMonad<V>>;
-  join<V>(): IMonad<V> | Promise<IMonad<V>>; // only if T = IMonad<V>
+  bind<V>(fn: (val: T) => IMonad<V>): IMonad<V>;
+  flatMap<V>(fn: (val: T) => IMonad<V>): IMonad<V>;
+  map<V>(fn: (val: T) => V): IMonad<V>;
+  join<V>(): IMonad<V>; // only if T = IMonad<V>
 
   /* These are monet-Monad-specific: */
-  takeLeft(m: IMonad<T>): IMonad<T> | Promise<IMonad<T>>;
-  takeRight(m: IMonad<T>): IMonad<T> | Promise<IMonad<T>>;
-  tap(fn: (val: T) => void): IMonad<T> | Promise<IMonad<T>>;
+  takeLeft(m: IMonad<T>): IMonad<T>;
+  takeRight(m: IMonad<T>): IMonad<T>;
+  tap(fn: (val: T) => void): IMonad<T>;
 }
 
 interface IMonadFactory extends Function {
@@ -85,28 +84,33 @@ export const Identity: IIdentityStatic;
 */
 
 export interface Maybe<T> {
+  bind<V>(fn: (val: T) => Maybe<V>): Maybe<V>;
   /* Inherited from Monad: */
-  bind<V>(fn: (val: T) => Maybe<V> | Promise<Maybe<V>>): Maybe<V> | Promise<Maybe<V>>;
   flatMap<V>(fn: (val: T) => Maybe<V>): Maybe<V>;
-  asyncFlatMap<V>(fn: (val: T) => Promise<Maybe<V>>): Promise<Maybe<V>>;
-  chain<V>(fn: (val: T) => Maybe<V> | Promise<Maybe<V>>): Maybe<V> | Promise<Maybe<V>>;
-  map<V>(fn: (val: T) => V): Maybe<V>;
   join<V>(): Maybe<V> | Promise<Maybe<V>>; // if T is Identity<V>
   takeLeft(m: Maybe<T>): Maybe<T> | Promise<Maybe<T>>;
   takeRight(m: Maybe<T>): Maybe<T> | Promise<Maybe<T>>;
-  flip(m: T): Maybe<T>;
-  tap<T>(fn: (val: T) => void): Maybe<T>;
+  // chain<V>(fn: (val: T) => Maybe<V> | Promise<Maybe<V>>): Maybe<V> | Promise<Maybe<V>>;
 
+  // $#:
+  asyncFlatMap<V>(fn: (val: T) => Promise<Maybe<V>>): Promise<Maybe<V>>;
+  flip<V>(m: T): Maybe<V>;
+  tap<T>(fn: (val: T) => void): Maybe<T>;
+  awaitMap<V>(fn: (val: T) => Promise<V>): Promise<Maybe<V>>;
+  leftBind<V>(fn: () => Maybe<V>): Maybe<V>;
+  asyncLeftBind<T>(fn: () => Promise<Maybe<T>>): Promise<Maybe<T>>;
+  
+  
   /* Inherited from Applicative */
   ap<V>(maybeFn: Maybe<(val: T) => V>): Maybe<V> | Promise<Maybe<V>>;
-
+  
   /* Maybe specific */
   cata<Z>(none: () => Z, some: (val: T) => Z): Z;
-  asyncCata<Z>(none: () => Promise<Z>, some: (val: T) => Promise<Z>): Promise<Z>;
   fold<V>(val: V): (fn: (val: T) => V) => V;
-
+  
   filter(fn: (val: T) => boolean): Maybe<T> | Promise<Maybe<T>>;
-
+  map<V>(fn: (val: T) => V): Maybe<V>;
+  
   isSome(): boolean;
   isJust(): boolean;
   isNone(): boolean;
@@ -139,7 +143,10 @@ interface IMaybeStatic extends IMonadStatic {
   unit: ISomeStatic;
   of: ISomeStatic;    // alias for unit
   pure: ISomeStatic;  // alias for unit
-  fromPromise<T>(p: Promise<T>): Maybe<T>;
+
+  // $#:
+  fromPromise<T>(p: Promise<T>): Promise<Maybe<T>>;
+  init<T>(isVal: boolean, val?: T): Maybe<T>;
 }
 
 export const Some: ISomeStatic;
@@ -153,28 +160,31 @@ export const Maybe: IMaybeStatic;
 */
 
 export interface Either<E, T> {
+  bind<V>(fn: (val: T) => Either<E, V>): Either<E, V>;
   /* Inherited from Monad: */
-  bind<V>(fn: (val: T) => Either<E, V> | Promise<Either<E, V>>): Either<E, V> | Promise<Either<E, V>>;
   flatMap<V>(fn: (val: T) => Either<E, V>): Either<E, V>;
-  asyncFlatMap<V>(fn: (val: T) => Promise<Either<E, V>>): Promise<Either<E, V>>;
-  chain<V>(fn: (val: T) => Either<E, V> | Promise<Either<E, V>>): Either<E, V> | Promise<Either<E, V>>;
-  map<V>(fn: (val: T) => V | Promise<V>): Either<E, V>;
+  chain<V>(fn: (val: T) => Either<E, V>): Either<E, V>;
+  map<V>(fn: (val: T) => V): Either<E, V>;
   join<V>(): Either<E, V>; // if T is Either<V>
-  takeLeft(m: Either<E, T>): Either<E, T> | Promise<Either<E, T>>;
-  takeRight(m: Either<E, T>): Either<E, T> | Promise<Either<E, T>>;
+  takeLeft(m: Either<E, T>): Either<E, T>;
+  takeRight(m: Either<E, T>): Either<E, T>;
+  
+  // $#:
+  asyncFlatMap<V>(fn: (val: T) => Promise<Either<E, V>>): Promise<Either<E, V>>;
   flip<E, T>(): Either<T, E>;
   tap<A>(fn: (val: A) => void): Either<E, T>;
+  asyncLeftBind<F>(fn: (leftVal: E) => Promise<Either<F, T>>): Promise<Either<F, T>>;
+  awaitMap<V>(fn: (val: T) => Promise<V>): Promise<Either<E, V>>;
 
   /* Inherited from Applicative */
-  ap<V>(eitherFn: Either<E, (val: T) => V>): Either<E, V> | Promise<Either<E, V>>;
+  ap<V>(eitherFn: Either<E, (val: T) => V>): Either<E, V>;
 
   /* Either specific */
   cata<Z>(leftFn: (err: E) => Z, rightFn: (val: T) => Z): Z;
-  asyncCata<Z>(leftFn: (err: E) => Promise<Z>, rightFn: (val: T) => Promise<Z>): Promise<Z>;
 
-  bimap<Z, V>(leftFn: (err: E) => Z, rightFn: (val: T) => V): Either<Z, V> | Promise<Either<Z, V>>;
-  leftMap<F>(fn: (leftVal: E) => F | Promise<Either<E, T>>): Either<F, T> | Promise<Either<F, T>>;
-  leftBind<F>(fn: (leftVal: E) => Either<F, T> | Promise<Either<F, T>>): Either<F, T> | Promise<Either<E, T>>;
+  bimap<Z, V>(leftFn: (err: E) => Z, rightFn: (val: T) => V): Either<Z, V>;
+  leftMap<F>(fn: (leftVal: E) => F): Either<F, T>;
+  leftBind<F>(fn: (leftVal: E) => Either<F, T>): Either<F, T>;
 
   isRight(): boolean;
   isLeft(): boolean;
@@ -192,6 +202,7 @@ interface IEitherStatic extends IMonadStatic {
   of: IRightStatic;    // alias for unit
   pure: IRightStatic;  // alias for unit
   fromPromise<E, T>(p: Promise<T>): Promise<Either<E, T>>;
+  init<L, R>(isRight: boolean, val: L | R, rightVal?: R): Either<L, R>;
 }
 
 interface IRightStatic extends IMonadFactory {
@@ -525,27 +536,32 @@ interface ISuspendStatic extends IMonadFactory {
 
 declare global {
 
-  interface Promise<T> {
+  interface Promise<T> extends IMonad<T> {
 
     /* Inherited from Monad: */
     // bind<V>(fn: (val: T) => IMonad<V>): Promise<IMonad<V>>;
-    asyncFlatMap<V>(fn: (val: T) => IMonad<V>): Promise<IMonad<V>>;
-    // chain<V>(fn: (val: T) => IMonad<V>): Promise<IMonad<V>>;
-    asyncMap<V>(fn: (val: T) => V | Promise<V>): Promise<IMonad<V>>;
-    // join<V>(): Promise<IMonad<V>>; // if T is Identity<V>
+    asyncLeftBind<E, F>(fn: (val: E) => Promise<IMonad<F>> | IMonad<F>): Promise<any>;
+    asyncFlatMap<B, V>(fn: (val: B) => Promise<IMonad<V>> | IMonad<V>): Promise<any>;
+    // chain<V>(fn: (val: T) => IMonad<V>): Promise<any>;
+    // map<B, V>(fn: (val: B) => V): Promise<any>;
+    asyncMap<B, V>(fn: (val: B) => V): Promise<any>;
+    asyncAwaitMap<B, V>(fn: (val: B) => Promise<V>): Promise<any>;
+    // leftMap<E, V, F>(fn: (val: E) => F): Promise<any>;
+    asyncLeftMap<E, V, F>(fn: (val: E) => F | Promise<F>): Promise<any>;
+    // join<V>(): Promise<any>; // if T is Identity<V>
     // takeLeft(m: IMonad<T>): Promise<IMonad<T>>;
     // takeRight(m: IMonad<T>): Promise<IMonad<T>>;
-    asyncFlip(m: T): Promise<IMonad<T>>;
-    asyncTap<T>(fn: (val: T) => void): Promise<IMonad<T>>;
+    asyncTap<V>(fn: (val: V) => void): Promise<T>;
 
     /* Inherited from Applicative */
     // ap<V>(maybeFn: IMonad<(val: T) => V>): Promise<IMonad<V>>;
 
     /* Maybe specific */
-    asyncCata<Z>(none: () => Z, some: (val: T) => Z): Z | Promise<Z>;
+    asyncCata<Z>(noneOrLeft: (val?: any) => Z, someOrRight: (val: any) => Z): Promise<Z>;
     // fold<V>(val: V): (fn: (val: T) => V) => V;
 
     // filter(fn: (val: T) => boolean): Promise<IMonad<T>>;
+    awaitMap(fn: (val: any) => Promise<any>): Promise<any>;
   }
 }
 export const Free: IFreeStatic;

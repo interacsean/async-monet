@@ -15,6 +15,7 @@ const monetMonads = {
   Maybe: [
     ...monadFns,
     "toEither",
+    "leftBind",
   ],
   Either: [
     ...monadFns,
@@ -47,10 +48,16 @@ const monetMonads = {
 
 monet.extendMonet = function extendMonet(useMonadicPromises = false) {
   // leftBind/leftFlatMap, which flatMaps in left/none conditions
-  monet.Either.fn.leftBind = function leftBind() {
+  monet.Either.fn.leftBind = function leftBind(fn) {
     return this.isLeft() ? fn(this.value) : this;
   };
   monet.Either.fn.leftFlatMap = monet.Either.fn.leftBind;
+
+  // leftBind/leftFlatMap, which flatMaps in left/none conditions
+  monet.Maybe.fn.leftBind = function leftBind(fn) {
+    return this.isNone() ? fn(this.value) : this;
+  };
+  monet.Maybe.fn.leftFlatMap = monet.Maybe.fn.leftBind;
 
   // tap, which takes a right value but returns original unmodified value
   monet.Either.fn.tap = function tap(fn) {
@@ -76,23 +83,47 @@ monet.extendMonet = function extendMonet(useMonadicPromises = false) {
       if (typeof result.then === "function") {
         return new Promise((res, rej) => {
           result
-            .then(monet.Either.Right)
-            .catch(monet.Either.Left);
+            .then(v => res(monet.Either.Right(v)))
+            .catch(e => res(monet.Either.Left(e)));
         });
       }
       return Promise.resolve(monet.Either.Right(result));
     }
     return Promise.resolve(this);
   };
+  monet.Maybe.fn.awaitMap = function (fn) {
+    if (this.isValue) {
+      const result = fn(this.value);
+      if (typeof result.then === "function") {
+        return new Promise((res, rej) => {
+          result
+            .then(v => res(monet.Maybe.Some(v)))
+            .catch(e => res(monet.Maybe.None()));
+        });
+      }
+      return Promise.resolve(monet.Maybe.Some(result));
+    }
+    return Promise.resolve(this);
+  };
 
   // fromPromise, errors (catch) go to Left
-  monet.Either.fn.fromPromise = function fromPromise(prom) {
+  monet.Either.fromPromise = function fromPromise(prom) {
     return prom.then(monet.Either.Right).catch(monet.Either.Left);
   };
-  monet.Maybe.fn.fromPromise = function fromPromise(prom) {
+  monet.Maybe.fromPromise = function fromPromise(prom) {
     return prom.then(monet.Maybe.Some).catch(monet.Maybe.None);
   };
 
+  // init
+  monet.Either.init = function init(isRight, val, rightVal) {
+    return isRight
+      ? monet.Either.Right(rightVal !== undefined ? rightVal : val)
+      : monet.Either.Left(val);
+  };
+  monet.Maybe.init = function init(isVal, val = null) {
+    return isVal ? monet.Some(val) : monet.None();
+  };
+  
   if (useMonadicPromises) {
     // PEither.fn = PEither.prototype;
     // Object.keys(monet.Either.prototype).forEach(protFn => {
@@ -126,7 +157,9 @@ monet.extendMonet = function extendMonet(useMonadicPromises = false) {
 
     Object.keys(monetMonads).forEach((monad) => {
       monetMonads[monad].forEach((monadicFn) => {
-        monet[monad]["async" + ucfirst(monadicFn)] = monet[monad][monadicFn];
+        // alias functions, which will be typed to return a Promise
+        monet[monad].prototype["async" + ucfirst(monadicFn)] = monet[monad].prototype[monadicFn];
+        Promise.prototype[monadicFn] =
         Promise.prototype["async" + ucfirst(monadicFn)] =
           function anonFunctor(...args) {
             return this.then((resVal) => resVal[monadicFn].call(resVal, ...args));
